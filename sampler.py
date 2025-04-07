@@ -90,7 +90,7 @@ class DataSampler:
             rel_id = self.rel2id[rel_name]  # 获取当前关系的ID
             if self.seed is not None:
                 random.seed(self.seed)  # 设置随机种子
-            # random.shuffle(samples)  # 随机打乱当前关系的样本顺序
+            random.shuffle(samples)  # 随机打乱当前关系的样本顺序
             texts = [' '.join(s['tokens']) for s in samples]  # 获取每个样本的文本
             encoded = self.tokenizer.batch_encode_plus(
                 texts,
