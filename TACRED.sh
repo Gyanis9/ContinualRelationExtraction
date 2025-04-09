@@ -10,7 +10,7 @@ CUDA_VISIBLE_DEVICES=$1 python3 main.py \
   --num_of_train_samples 420 \
   --num_of_val_samples 140 \
   --num_of_test_samples 140 \
-  --batch_size 16 \
+  --batch_size 4 \
   --num_of_relations 40  \
   --cache_file data/TACRED_data.pt \
   --relations_per_task 4 \

@@ -180,7 +180,7 @@ if __name__ == '__main__':
                 add_aca_data = get_aca_data(config, deepcopy(training_data), current_relations, tokenizer)
 
             if config.additional_classifier:
-                model = Wake(config, model, train_data_for_initial + add_aca_data, 2)
+                model = Wake(config, model, train_data_for_initial + add_aca_data, 4)
             else:
                 model = Wake(config, model, train_data_for_initial, 2)
 
