@@ -17,7 +17,7 @@ logLevel: info  # 日志记录的级别 可选的值有 'debug'、'info'、'warn
 useAnnotation: false  # 如果设置为 true，NNI 会在实验结果中使用注解进行记录 
 
 # 试验命令，指向你想要运行的脚本
-trialCommand: bash TACRED.sh 1 # 这是每个试验执行的命令，可以根据你的实际需求修改 这里表示每个试验会运行 `bash TACRED.sh` 
+trialCommand: bash TACRED.sh 1 # 这是每个试验执行的命令，可以根据你的实际需求修改 这里表示每个试验会运行 `bash TACRED.sh 1`
 
 # 试验代码所在的目录
 trialCodeDirectory: .  # 指定试验代码所在的目录，通常是你的项目根目录，`.` 表示当前目录 
