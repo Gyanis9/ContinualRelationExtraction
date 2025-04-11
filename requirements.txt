@@ -4,3 +4,5 @@ nni==3.0
 pandas==2.2.3
 scikit-learn==1.6.1
 torchvision==0.20.1
+tqdm==4.67.1
+datasets==3.3.2
