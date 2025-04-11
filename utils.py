@@ -5,7 +5,7 @@ from sklearn.cluster import KMeans
 import torch
 from torch import nn
 from transformers import BertTokenizer
-
+from typing import List
 from data_loader import get_data_loader
 
 
@@ -37,6 +37,48 @@ def set_seed(seed: int) -> None:
     # 设置 cudnn 来优化卷积算法，同时保证可复现性
     torch.backends.cudnn.benchmark = False  # 禁止 cuDNN 选择最合适的算法
     torch.backends.cudnn.deterministic = True  # 保证每次运行时算法是确定的，支持复现性
+
+
+def eliminate_experiences(config, experiences:List[Any]):
+    """
+    从经验池中筛选高质量和频繁使用的经验，并去除重复的经验。
+
+    通过阈值选择高质量经验，并通过使用频率选择最常使用的经验，合并这两部分经验，去重后更新经验池。
+
+    Args:
+        config: 配置对象，包含 threshold 参数，用于选择最频繁的经验的比例。
+        experiences: 包含经验的对象，提供获取高质量经验和频繁使用经验的功能。
+
+    Returns:
+        experiences: 更新后的经验池对象，包含去重后的高质量和频繁使用经验。
+    """
+    # 获取配置中的经验筛选阈值
+    threshold = config.threshold  # 用于决定频繁经验的筛选比例
+
+    # 获取高质量经验
+    high_quality_experiences = experiences.get_high_quality_experiences()
+
+    # 使用频率计算，选择频繁使用的经验
+    usage_threshold = int(len(experiences.experiences) * threshold)  # 计算要选择的经验数量
+    # 按照使用频率对经验索引排序，选择前 `usage_threshold` 个频繁经验
+    frequent_experiences_indices = sorted(
+        range(len(experiences.usage_count)), key=lambda x: experiences.usage_count[x], reverse=True
+    )[:usage_threshold]
+
+    # 获取频繁使用的经验
+    frequent_experiences = [experiences.experiences[i] for i in frequent_experiences_indices]
+
+    # 合并高质量经验和频繁使用经验，并去重
+    combined_experiences = high_quality_experiences + frequent_experiences
+
+    # 去除重复经验，使用 set() 去重后再转换为 list
+    unique_experiences = list(set(combined_experiences))
+
+    # 更新经验池，重置使用计数
+    experiences.experiences = unique_experiences
+    experiences.usage_count = [0] * len(unique_experiences)  # 重置所有经验的使用计数
+
+    return experiences
 
 
 def select_data(config: Any, encoder: nn.Module, sample_set: list,
@@ -125,6 +167,9 @@ def get_proto(config: Any, encoder: nn.Module, memory_set: list,
 
     # 存储特征向量的列表
     features = []
+
+    # 获取编码器的输出维度（假设encoder输出是固定维度的）
+    encoder_output_dim = config.encoder_output_size  # 根据你的模型配置定义
 
     # 将模型设置为评估模式
     encoder.eval()
