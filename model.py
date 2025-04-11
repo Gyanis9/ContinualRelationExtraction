@@ -2,6 +2,8 @@ from typing import Any
 from transformers import AutoModel, AutoConfig
 import torch
 import torch.nn as nn
+from typing import List, Tuple
+import torch.nn.functional as F
 
 
 class ProtoSoftmaxLayer(nn.Module):
@@ -112,6 +114,37 @@ class ProtoSoftmaxLayer(nn.Module):
         nn.init.xavier_normal_(module.weight)
         if module.bias is not None:
             nn.init.constant_(module.bias, 0)
+
+    def generate_negative_samples(self, batch_representations: torch.Tensor) -> torch.Tensor:
+        """
+        生成负样本。
+
+        对于每个输入样本，从其余样本中随机选择 `num_negatives` 个样本作为负样本。
+
+        Args:
+            batch_representations (torch.Tensor): 输入的批次特征矩阵，形状为 (batch_size, feature_dim)。
+
+        Returns:
+            torch.Tensor: 生成的负样本，形状为 (batch_size, num_negatives, feature_dim)。
+        """
+        batch_size, feature_dim = batch_representations.shape  # 获取批次大小和特征维度
+        negatives = []  # 用于存储负样本的列表
+
+        # 对每个样本生成负样本
+        for i in range(batch_size):
+            # 选择除当前样本外的其他所有样本
+            selection = torch.cat([batch_representations[:i], batch_representations[i + 1:]])
+
+            # 随机选择 `num_negatives` 个样本作为负样本
+            indices = torch.randperm(selection.size(0))[:self.config.num_negatives]  # 随机选取索引
+            negative_samples = selection[indices]  # 根据索引选择负样本
+
+            negatives.append(negative_samples)  # 将生成的负样本添加到列表中
+
+        # 将负样本列表堆叠成一个张量，形状为 (batch_size, num_negatives, feature_dim)
+        negatives = torch.stack(negatives, dim=0)
+
+        return negatives
 
     def forward(self, sentences: torch.Tensor) -> tuple[Any, Any]:
         """
@@ -267,3 +300,69 @@ class BertEncoder(nn.Module):
         if self.pattern == 'standard':
             return self._standard_forward(input_ids)
         return self._entity_marker_forward(input_ids)
+
+
+class Experience:
+    """
+    用于管理训练中的经验。每个经验包含一个句子、标签、模型输出和损失值。可以根据损失值选择高质量经验并进行管理。
+
+    Attributes:
+        top_k (float): 选择高质量经验的比例，取值范围为 [0, 1]。
+        experiences (List[Tuple[str, torch.Tensor, torch.Tensor, float]]): 存储经验的列表，每个经验包含句子、标签、模型输出和损失。
+        usage_count (List[int]): 存储每个经验的使用次数。
+    """
+
+    def __init__(self, config):
+        """
+        初始化 Experience 对象。
+
+        Args:
+            config: 配置对象，包含 top_k 参数来指定选择的高质量经验比例。
+        """
+        self.top_k = config.top_k  # 设置选择高质量经验的比例
+        self.experiences: List[Tuple[str, torch.Tensor, torch.Tensor, float]] = []  # 存储经验数据
+        self.usage_count: List[int] = []  # 存储每个经验的使用次数
+
+    def add(self, sentence: str, labels: torch.Tensor, outputs: torch.Tensor):
+        """
+        向经验池中添加新的经验。
+
+        Args:
+            sentence (str): 输入的句子或文本。
+            labels (torch.Tensor): 对应的标签，通常是目标类别的张量。
+            outputs (torch.Tensor): 模型的预测输出，通常是 logits。
+        """
+        # 计算交叉熵损失，用于衡量模型输出与标签的差异
+        loss = F.cross_entropy(outputs, labels)
+
+        # 将经验（句子、标签、模型输出、损失值）添加到经验池中
+        self.experiences.append((sentence, labels, outputs, loss.item()))
+
+        # 为新经验初始化使用次数
+        self.usage_count.append(0)
+
+    def get_high_quality_experiences(self) -> List[Tuple[str, torch.Tensor, torch.Tensor, float]]:
+        """
+        获取高质量经验，通过按损失值排序并选择前 top_k 比例的经验。
+
+        Returns:
+            List[Tuple[str, torch.Tensor, torch.Tensor, float]]: 高质量经验列表，每个经验包含句子、标签、模型输出和损失值。
+        """
+        # 选择 top_k 比例的高质量经验
+        num_high_quality = int(len(self.experiences) * self.top_k)
+
+        # 按损失值升序排序经验，损失越小的经验质量越高
+        sorted_experiences = sorted(self.experiences, key=lambda x: x[3])
+
+        # 返回前 top_k 个高质量经验
+        high_quality_experiences = sorted_experiences[:num_high_quality]
+        return high_quality_experiences
+
+    def increment_usage(self, index: int):
+        """
+        增加指定经验的使用次数。
+
+        Args:
+            index (int): 要增加使用次数的经验的索引。
+        """
+        self.usage_count[index] += 1
